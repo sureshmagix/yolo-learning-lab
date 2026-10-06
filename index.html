@@ -1,34 +1,1291 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>YOLO Learning Lab</title><style>
-:root{--bg:#f4f2eb;--ink:#142d3e;--muted:#526875;--accent:#007c73;--line:#d8e0dc}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,sans-serif}header{background:#122f40;color:white;padding:48px max(5vw,20px)}header small{color:#6fe0bd;letter-spacing:3px}h1{font-size:clamp(32px,5vw,60px);line-height:1.08;max-width:850px;margin:20px 0}h2{font-size:28px;line-height:1.3}h3{margin-bottom:8px}nav{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:12px 5vw;display:flex;gap:22px;overflow:auto;z-index:2}a{color:var(--accent)}nav a{white-space:nowrap;text-decoration:none;font-weight:650}main{max-width:1200px;margin:auto;padding:20px}section{padding:26px 0;scroll-margin-top:65px}.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:24px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card,.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px}.tag{color:var(--accent);font-size:13px;letter-spacing:2px;font-weight:700}.note{border-left:4px solid var(--accent);padding:14px 18px;background:#e3f1eb}canvas{width:100%;height:auto;background:#e9eff1;touch-action:none;border-radius:10px}button,select,input{font:inherit}button{border:0;border-radius:8px;padding:10px 15px;background:var(--accent);color:#fff;cursor:pointer}button.secondary{background:#e6eeeb;color:var(--ink)}input[type=number]{width:110px;padding:6px;border:1px solid var(--line);border-radius:6px}label{display:inline-block;margin:6px 12px 6px 0}input[type=range]{width:100%}pre{overflow:auto;background:#132f40;color:#b6f0d4;padding:18px;border-radius:10px;line-height:1.6;font-size:14px}table{border-collapse:collapse;width:100%;background:white}td,th{text-align:left;padding:12px;border-bottom:1px solid var(--line)}th{color:var(--accent)}.scroll{overflow:auto}.sub{color:var(--muted)}img{max-width:100%;border-radius:12px}details{background:white;margin:12px 0;padding:15px;border-radius:10px}summary{cursor:pointer;font-weight:700}.steps li{margin-bottom:12px}output{display:block}footer{padding:30px 20px;text-align:center;color:var(--muted)}@media(max-width:800px){.grid,.cards{grid-template-columns:1fr}nav{gap:16px}header{padding:30px 20px}}
-</style></head><body><header><small>OPEN COMPUTER VISION TUTORIAL</small><h1>Teach a model where to look.<br>Then teach your system what to read.</h1><p>A practical introduction to YOLO, plate recognition and object tracking.</p><p>Interactive illustrations • No installation • No real AI inference on this page</p></header><nav><a href="#basics">01 Basics</a><a href="#coordinates">02 Coordinates</a><a href="#image">03 Annotation</a><a href="#models">04 Models</a><a href="#train">05 Training</a><a href="#tracking">06 Tracking</a><a href="#anpr">07 ANPR</a></nav><main>
-<section id="basics"><span class="tag">01 / UNDERSTAND THE JOB</span><h2>YOLO = You Only Look Once</h2><p>YOLO is a family of neural networks for computer vision. A detection model processes an image and predicts object categories and bounding boxes in one forward pass. Think of it as a trained visual inspector: “a plate is here.” It does not automatically read the plate text.</p><div class="cards"><article class="card"><h3>Detection</h3><p>Find each object in a frame.</p><pre>class: plate
-box: (400,250,600,350)
-confidence: 0.92</pre><p class="sub">Confidence is a model score, not a guaranteed probability of correctness.</p></article><article class="card"><h3>Recognition / OCR</h3><p>Read characters inside the cropped plate.</p><pre>TN 09 AB 1234</pre><p class="sub">Usually a separate text recognition model, or a custom character detection pipeline.</p></article><article class="card"><h3>Tracking</h3><p>Associate detections across video frames.</p><pre>vehicle → track ID 17
-frame 1 → 2 → 3</pre><p class="sub">A temporary track ID is not a registration number or a permanent identity.</p></article></div><h3>What does the network see?</h3><p>A colour image is a grid of numerical pixel values: height × width × 3 colour channels. The loader resizes/pads it and prepares a tensor. Learned layers extract patterns such as edges, textures and vehicle/plate features at different scales; the prediction head estimates classes and boxes. Training adjusts millions of weights to reduce prediction error. Labels supervise learning; they are not supplied with a new image at inference.</p><p class="note">The normalized box label is a training file convention. It is not the complete image representation inside the network. The original YOLO used a grid formulation; modern variants use different heads and feature scales, so a single fixed grid does not explain every YOLO model.</p></section>
-<section id="coordinates"><span class="tag">02 / TRY IT YOURSELF</span><h2>Draw a box. Watch the coordinates change.</h2><p>Origin (0,0) is the top-left. x increases to the right; y increases downward. Drag across the sample to replace the box, or upload your own image. Coordinates always refer to the image's original size, not its displayed CSS size.</p><div class="grid"><div class="panel"><canvas id="scene" width="1000" height="1000" aria-label="Sample vehicle and editable bounding box"></canvas><p><button id="sample">Reset sample</button> <label>Choose your image <input id="upload" type="file" accept="image/*"></label></p><p id="dims" class="sub"></p><p class="sub">Synthetic vehicle illustration, not a training dataset. One box is edited at a time.</p></div><div class="panel"><h3>Bounding box in pixels</h3><div id="fields"></div><label>Class <select id="class"><option value="0">0 — object</option><option value="1">1 — vehicle</option><option value="2">2 — plate</option></select></label><p id="error" role="status"></p><output id="math" aria-live="polite"></output><h3>YOLO detection label</h3><pre id="label"></pre><button id="download">Download label .txt</button><p class="sub">For this lab: names: {0: object, 1: vehicle, 2: plate}. A plate-only dataset should instead use only class 0. Match the image and label filenames. Each object needs its own row; this demo exports one row.</p><h3>Image and box inspector</h3><output id="inspect"></output><label>Square model input <select id="inputsize"><option>320</option><option selected>640</option><option>960</option><option>1280</option></select></label><output id="letterbox"></output><p class="sub">This shows an ideal centred square letterbox transform. Actual runtime padding can depend on stride and configuration.</p><h3>Normalization</h3><pre>cx = ((x1 + x2) / 2) / W
-cy = ((y1 + y2) / 2) / H
-w  = (x2 - x1) / W
-h  = (y2 - y1) / H</pre><p>Normalization describes position and size as fractions of the image. A width of 0.2 means 20% of the image width.</p></div></div><details><summary>What happens when a 1000 × 500 image becomes 640 × 640?</summary><p>With aspect-preserving letterboxing, scale r = 0.64. The content becomes 640 × 320, with 160 pixels padding above and below. Original (500,300) becomes (320,352). Mapping back requires subtracting the padding and dividing by r. Do not normalize original annotations by the padded input dimensions. The training loader transforms boxes with the image.</p></details></section>
-<section id="image"><span class="tag">03 / ANNOTATION WORKFLOW</span><h2>Every training image needs consistent ground truth</h2><ol><li>Define the categories you want to detect.</li><li>Draw a tight box around each visible target object.</li><li>Assign its class ID using one shared class mapping.</li><li>Normalize coordinates using the original image dimensions.</li><li>Save one label row per object, paired with the image filename.</li><li>Review labels before splitting and training.</li></ol><p class="note">Example: in a 1000 × 1000 image, box (400,250)–(600,350) has centre (500,300), width 200 and height 100. Class 0 produces <b>0 0.500 0.300 0.200 0.100</b>. In a 1000 × 500 image, the same box produces <b>0 0.500 0.600 0.200 0.200</b>.</p><p>Class IDs are dataset-specific. Use the same mapping for training, validation, testing and deployment.</p></section><section id="models"><span class="tag">04 / THREE MEANINGS OF “TYPE”</span><h2>Generation, size and task are different choices</h2><div class="scroll"><table><tr><th>Family</th><th>How to understand it</th></tr><tr><td>YOLOv1–v3</td><td>Foundational generations; useful for history and legacy systems.</td></tr><tr><td>YOLOv4 / v5 / v7</td><td>Different development branches, common in existing projects.</td></tr><tr><td>YOLOv8 / YOLO11</td><td>Ultralytics families with detection and other task variants; many examples and existing deployments.</td></tr><tr><td>YOLOv6 / v9 / v10 / YOLO12</td><td>Alternative research directions and architectures. Higher number alone does not prove better performance on your camera.</td></tr><tr><td>YOLO26</td><td>Current documented Ultralytics starting point verified for this guide; supports end-to-end NMS-free detection. Benchmark against a supported YOLO11 baseline.</td></tr></table></div><p>YOLO is an ecosystem, not a single company's sequential product line. This table is a representative map, not an exhaustive release inventory.</p><div class="cards"><div class="card"><h3>Size</h3><p>n = nano, s = small, m = medium, l = large, x = extra-large in common Ultralytics families. Larger models generally require more compute and memory. Accuracy and speed must be measured on your data and hardware.</p></div><div class="card"><h3>Task</h3><p>Detect: rectangles. Segment: object masks. Classify: image category. Pose: keypoints. OBB: rotated boxes. These tasks need different labels; the five-number detection format is not universal.</p></div><div class="card"><h3>Starting choice</h3><p>Try nano/small detection for a first plate detector. Evaluate missed plates, false alarms, OCR accuracy and latency. Small distant plates may need better optics, higher resolution or a vehicle crop before plate detection.</p></div></div></section>
-<section id="train"><span class="tag">05 / FROM EXAMPLES TO WEIGHTS</span><h2>Training is repeated prediction and correction</h2><ol class="steps"><li><b>Collect representative images.</b> Include front/rear plates, day/night, glare, blur, rain, angle and distance. Add backgrounds without plates. A few hundred images can start an experiment; there is no universal sufficient count.</li><li><b>Annotate consistently.</b> Draw a tight rectangle around the entire visible plate. Label all target objects under a consistent policy. OCR text needs separate transcription labels.</li><li><b>Split by independent capture.</b> For example, 70% train, 20% validation, 10% test. Keep neighbouring video frames and the same vehicle/session together to avoid leakage.</li><li><b>Fine-tune a pretrained model.</b> The model predicts; a loss measures box/class errors; backpropagation computes gradients; an optimizer updates weights. A batch is a subset of images; an epoch is a pass through the training set.</li><li><b>Validate during development.</b> Tune with validation data. Falling training loss with worsening validation suggests overfitting. Keep the test set untouched until final evaluation.</li><li><b>Evaluate and deploy.</b> Measure precision, recall, mAP, missed plates and latency. Separately test exact full-plate OCR accuracy, tracking ID switches, duplicate counts and real camera conditions.</li></ol><details open><summary>Dataset layout and runnable starting commands</summary><pre>dataset/images/train/frame001.jpg
-dataset/labels/train/frame001.txt
-dataset/images/val/...
-dataset/labels/val/...
-dataset/images/test/...
-dataset/labels/test/...</pre><p>dataset.yaml (plate-only):</p><pre>path: /absolute/path/to/dataset
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>YOLO Learning Lab — Interactive Computer Vision & ANPR Masterclass</title>
+  <meta name="description" content="An interactive, visual, buildless educational laboratory for mastering YOLO object detection, bounding box math, multi-object tracking, and ANPR pipelines.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-surface: #0f172a;
+      --bg-card: #141e33;
+      --bg-card-hover: #1a2642;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(16, 185, 129, 0.3);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --accent-emerald: #10b981;
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-indigo: #6366f1;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --accent-purple: #a855f7;
+
+      --mono-font: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+      --sans-font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--sans-font);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    body {
+      overflow-x: hidden;
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(6, 182, 212, 0.15), transparent),
+        radial-gradient(circle at 100% 30%, rgba(99, 102, 241, 0.08), transparent 40%),
+        radial-gradient(circle at 0% 70%, rgba(16, 185, 129, 0.08), transparent 40%);
+    }
+
+    /* Header & Hero */
+    header {
+      padding: 60px 24px 40px;
+      text-align: center;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .badge-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.3); }
+    }
+
+    h1 {
+      font-size: clamp(32px, 5vw, 54px);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+      background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-sub {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 680px;
+      margin: 0 auto 28px;
+      line-height: 1.6;
+    }
+
+    .hero-highlights {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+    .hero-highlights span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #cbd5e1;
+    }
+
+    /* Sticky Navigation */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      overflow-x: auto;
+    }
+
+    nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 8px;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    nav a:hover, nav a.active {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    nav a.active {
+      color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+    }
+
+    /* Main Container */
+    main {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 20px 20px 80px;
+    }
+
+    section {
+      padding: 50px 0;
+      border-bottom: 1px solid var(--border);
+      scroll-margin-top: 70px;
+    }
+
+    .section-tag {
+      display: inline-block;
+      font-family: var(--mono-font);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h2 {
+      font-size: clamp(24px, 3.5vw, 36px);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 14px;
+      color: #fff;
+    }
+
+    .section-lead {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 800px;
+      margin-bottom: 30px;
+    }
+
+    /* Grids & Panels */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      position: relative;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Canvas Studio Styles */
+    .canvas-container {
+      position: relative;
+      background: #060b13;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      cursor: crosshair;
+    }
+
+    .canvas-hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .hud-badge {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: var(--mono-font);
+      font-size: 11px;
+      color: var(--accent-cyan);
+    }
+
+    .canvas-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--sans-font);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.18s ease;
+      background: var(--bg-card);
+      color: var(--text-main);
+    }
+
+    .btn:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      border: none;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #34d399, #10b981);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+    .file-input-wrapper input[type=file] {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    /* Coordinate Inputs & Math */
+    .coord-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .coord-field {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+
+    .coord-field label {
+      display: block;
+      font-family: var(--mono-font);
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+    }
+
+    .coord-field input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-family: var(--mono-font);
+      font-size: 14px;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .select-field {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-family: var(--sans-font);
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
+    /* Live YOLO Label Decoder */
+    .yolo-decoder-card {
+      background: #090e1a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 18px;
+      margin-top: 18px;
+    }
+
+    .yolo-chip-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+      font-family: var(--mono-font);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .yolo-chip {
+      padding: 6px 12px;
+      border-radius: 6px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1.2;
+    }
+    .yolo-chip .chip-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      opacity: 0.8;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+    }
+
+    .chip-cls { background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4); }
+    .chip-cx  { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .chip-cy  { background: rgba(6, 182, 212, 0.2); color: #38bdf8; border: 1px solid rgba(6, 182, 212, 0.4); }
+    .chip-w   { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .chip-h   { background: rgba(244, 63, 94, 0.2); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.4); }
+
+    .math-breakdown {
+      font-family: var(--mono-font);
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px;
+      border-radius: 8px;
+      border-left: 3px solid var(--accent-cyan);
+    }
+    .math-breakdown strong { color: #fff; }
+
+    /* Concept Cards */
+    .concept-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .concept-card:hover {
+      border-color: rgba(255, 255, 255, 0.16);
+      transform: translateY(-2px);
+    }
+
+    .concept-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 14px;
+    }
+
+    .icon-emerald { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .icon-cyan    { background: rgba(6, 182, 212, 0.15); color: #38bdf8; }
+    .icon-indigo  { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+    .icon-amber   { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .icon-purple  { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+
+    .concept-card h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .concept-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      flex-grow: 1;
+    }
+
+    .concept-badge {
+      display: inline-block;
+      margin-top: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-dim);
+      font-family: var(--mono-font);
+    }
+
+    /* Comparison Table */
+    .table-container {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      margin: 20px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 14px 18px;
+      color: #cbd5e1;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 14px 18px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    .pill-tag {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: var(--mono-font);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Code Blocks */
+    pre {
+      background: #080d17;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--mono-font);
+      font-size: 13px;
+      color: #38bdf8;
+      line-height: 1.65;
+    }
+
+    code {
+      font-family: var(--mono-font);
+      font-size: 0.9em;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #e2e8f0;
+    }
+
+    .code-comment { color: #64748b; }
+    .code-keyword { color: #f43f5e; font-weight: 600; }
+    .code-string  { color: #34d399; }
+    .code-arg     { color: #fbbf24; }
+
+    /* Interactive Pipeline Stages */
+    .pipeline-wrapper {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 24px 0;
+      position: relative;
+    }
+
+    .pipeline-step {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .pipeline-step:hover, .pipeline-step.active {
+      border-color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.08);
+      transform: translateY(-2px);
+    }
+
+    .pipeline-num {
+      font-family: var(--mono-font);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      margin-bottom: 6px;
+    }
+
+    .pipeline-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .pipeline-sub {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .pipeline-detail-box {
+      background: #090e1a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 14px;
+    }
+
+    /* Tracking Simulator Controls */
+    .tracker-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+      margin-top: 14px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-grow: 1;
+    }
+
+    input[type=range] {
+      flex-grow: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.15);
+      outline: none;
+      cursor: pointer;
+      accent-color: var(--accent-cyan);
+    }
+
+    .metric-badge {
+      font-family: var(--mono-font);
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #e2e8f0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Callout & Tips */
+    .callout {
+      border-left: 4px solid var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.08);
+      border-radius: 0 10px 10px 0;
+      padding: 16px 20px;
+      margin: 20px 0;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+
+    .callout strong { color: #fff; }
+
+    .callout-warning {
+      border-left-color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.08);
+    }
+
+    footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-dim);
+      font-size: 13px;
+      border-top: 1px solid var(--border);
+    }
+
+    footer a {
+      color: var(--accent-cyan);
+      text-decoration: none;
+    }
+
+    @media (max-width: 900px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      nav { justify-content: flex-start; }
+      .coord-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="badge-pill">
+      <span class="badge-pulse"></span>
+      Interactive Computer Vision Laboratory
+    </div>
+    <h1>Master YOLO Detection, Normalization & ANPR</h1>
+    <p class="hero-sub">
+      A zero-dependency, buildless visual guide. Learn why YOLO uses single-pass architectures, explore bounding box coordinate math in real-time, test tracking algorithms, and understand full automated number plate recognition pipelines.
+    </p>
+    <div class="hero-highlights">
+      <span>✨ 100% Client-Side Simulation</span>
+      <span>📦 0 Dependencies</span>
+      <span>🔒 Images Never Leave Your Browser</span>
+      <span>⚡ GitHub Pages Ready</span>
+    </div>
+  </header>
+
+  <!-- Sticky Navbar -->
+  <nav id="navbar">
+    <a href="#mental-model" class="active">01 Core Concept</a>
+    <a href="#coordinates">02 Coordinate Math</a>
+    <a href="#studio">03 Annotation Studio</a>
+    <a href="#models">04 Model Architecture</a>
+    <a href="#training">05 Training & Loss</a>
+    <a href="#tracking">06 Object Tracking</a>
+    <a href="#anpr">07 ANPR Pipeline</a>
+  </nav>
+
+  <main>
+
+    <!-- SECTION 01: THE CORE CONCEPT -->
+    <section id="mental-model">
+      <span class="section-tag">Module 01 • Fundamentals</span>
+      <h2>What is YOLO? (You Only Look Once)</h2>
+      <p class="section-lead">
+        Traditional computer vision systems evaluated thousands of sliding windows or region proposals per image (R-CNN). 
+        <strong>YOLO frames object detection as a single regression problem</strong>: passing an image through the neural network just once to predict both bounding box locations and class probabilities simultaneously.
+      </p>
+
+      <div class="grid-3">
+        <div class="concept-card">
+          <div class="concept-icon icon-emerald">🏷️</div>
+          <h3>1. Image Classification</h3>
+          <p>Answers <em>"What is inside this image?"</em>. Assigns a single categorical label to the entire picture. It does not locate where objects are.</p>
+          <span class="concept-badge">Output: "Car" (98% conf)</span>
+        </div>
+
+        <div class="concept-card">
+          <div class="concept-icon icon-cyan">🎯</div>
+          <h3>2. Object Detection (YOLO)</h3>
+          <p>Answers <em>"What is it, and WHERE is it?"</em>. Predicts a rectangular bounding box with coordinates <code>(x, y, w, h)</code> plus class label.</p>
+          <span class="concept-badge">Output: [plate: 0.50, 0.63, 0.18, 0.06]</span>
+        </div>
+
+        <div class="concept-card">
+          <div class="concept-icon icon-indigo">🔤</div>
+          <h3>3. Text OCR (ANPR)</h3>
+          <p>Answers <em>"What characters are written here?"</em>. Uses sequence recognition models to transcribe characters inside cropped license plates.</p>
+          <span class="concept-badge">Output: "TN 09 AB 1234"</span>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>💡 Key Mental Model:</strong> 
+        YOLO detects <em>where the license plate is</em>. It does <strong>not</strong> read the alphanumeric text itself! Reading text requires an OCR model (like CRNN, PaddleOCR, or EasyOCR) running on the detected plate crop.
+      </div>
+    </section>
+
+    <!-- SECTION 02: COORDINATE MATH -->
+    <section id="coordinates">
+      <span class="section-tag">Module 02 • Coordinate Systems</span>
+      <h2>Demystifying YOLO Bounding Box Math</h2>
+      <p class="section-lead">
+        Why does YOLO use fractions between <code>0.0</code> and <code>1.0</code> instead of pixel numbers? Cameras have varying resolutions (1080p, 4K, 720p). If annotations were in raw pixels, changing image resolution would break training. 
+        <strong>Normalization makes bounding boxes resolution-independent.</strong>
+      </p>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📐 The 5-Number YOLO Label Format</span>
+          </div>
+
+          <p style="margin-bottom: 14px; color: var(--text-muted); font-size: 14px;">
+            Every line in a YOLO annotation text file contains exactly 5 numbers separated by spaces:
+          </p>
+
+          <div class="yolo-chip-row" style="margin-bottom: 18px;">
+            <div class="yolo-chip chip-cls">
+              <span class="chip-label">class_id</span>
+              <span>0</span>
+            </div>
+            <div class="yolo-chip chip-cx">
+              <span class="chip-label">x_center</span>
+              <span>0.500000</span>
+            </div>
+            <div class="yolo-chip chip-cy">
+              <span class="chip-label">y_center</span>
+              <span>0.630000</span>
+            </div>
+            <div class="yolo-chip chip-w">
+              <span class="chip-label">width</span>
+              <span>0.180000</span>
+            </div>
+            <div class="yolo-chip chip-h">
+              <span class="chip-label">height</span>
+              <span>0.060000</span>
+            </div>
+          </div>
+
+          <div class="math-breakdown">
+            <div><strong>Center X:</strong> <code>cx = ((x1 + x2) / 2) / Image_Width</code></div>
+            <div><strong>Center Y:</strong> <code>cy = ((y1 + y2) / 2) / Image_Height</code></div>
+            <div><strong>Box Width:</strong> <code>w = (x2 - x1) / Image_Width</code></div>
+            <div><strong>Box Height:</strong> <code>h = (y2 - y1) / Image_Height</code></div>
+          </div>
+
+          <div style="margin-top: 16px; font-size: 13px; color: var(--text-muted);">
+            <em>Notice:</em> Origin <code>(0,0)</code> is always the <strong>top-left corner</strong> of the image. <code>x</code> increases to the right; <code>y</code> increases downwards.
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">🔄 Letterbox Preprocessing (Why Models Need Squares)</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 14px;">
+            Most YOLO backbones require fixed square tensors (e.g., <code>640 × 640</code>). To avoid stretching or distorting vehicles, the preprocessing pipeline applies <strong>aspect-preserving letterboxing</strong> with grey padding.
+          </p>
+
+          <div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 14px; border: 1px solid var(--border); font-family: var(--mono-font); font-size: 13px;">
+            <div style="color: var(--accent-cyan); margin-bottom: 6px;">Input: 1000 × 500 Image → Target: 640 × 640</div>
+            <div style="color: var(--text-muted); line-height: 1.8;">
+              • Scale ratio: <code>r = min(640/1000, 640/500) = 0.64</code><br>
+              • Rescaled image: <code>640 × 320 px</code><br>
+              • Vertical padding: <code>(640 - 320) / 2 = 160 px</code> (top & bottom)<br>
+              • Point (500, 250) → Padded tensor (320, 320)
+            </div>
+          </div>
+
+          <div class="callout callout-warning" style="margin-top: 14px; margin-bottom: 0;">
+            <strong>⚠️ Golden Rule:</strong> Always normalize annotations using the <em>original image dimensions</em>, not the letterboxed or padded tensor dimensions. YOLO loaders handle the transformation during training automatically.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 03: INTERACTIVE ANNOTATION STUDIO -->
+    <section id="studio">
+      <span class="section-tag">Module 03 • Hands-on Studio</span>
+      <h2>Interactive Annotation Studio</h2>
+      <p class="section-lead">
+        Practice drawing and adjusting bounding boxes. <strong>Drag handles to resize</strong>, <strong>drag inside to move</strong>, or <strong>click outside to draw a new box</strong>. Upload your own vehicle picture or use our sample illustration.
+      </p>
+
+      <div class="grid-2">
+        <!-- Canvas Studio Column -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">🎨 Visual Canvas (1000 × 1000 px)</span>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-secondary btn-sm" id="preset-plate" title="Snap to License Plate">🎯 Snap Plate</button>
+              <button class="btn btn-secondary btn-sm" id="preset-car" title="Snap to Vehicle">🚗 Snap Vehicle</button>
+              <button class="btn btn-secondary btn-sm" id="btn-reset" title="Reset Default Box">↺ Reset</button>
+            </div>
+          </div>
+
+          <div class="canvas-container">
+            <canvas id="scene" width="1000" height="1000" aria-label="Interactive YOLO annotation canvas"></canvas>
+            <div class="canvas-hud">
+              <span class="hud-badge" id="hud-dims">1000 × 1000 px</span>
+              <span class="hud-badge" id="hud-status">Ready</span>
+            </div>
+          </div>
+
+          <div class="canvas-controls">
+            <div class="file-input-wrapper">
+              <button class="btn btn-secondary">📁 Upload Your Image</button>
+              <input type="file" id="upload" accept="image/*">
+            </div>
+            <button class="btn btn-secondary" id="btn-center">↔ Center Box</button>
+            <span style="font-size: 12px; color: var(--text-dim); margin-left: auto;">💡 Tip: Grab corner/edge handles to resize</span>
+          </div>
+        </div>
+
+        <!-- Coordinates & Live Decoder Column -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">⚙️ Box Inspector & YOLO Exporter</span>
+          </div>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Target Class Category</label>
+            <select id="class-select" class="select-field">
+              <option value="0">0 — license_plate</option>
+              <option value="1">1 — vehicle</option>
+              <option value="2">2 — general_object</option>
+            </select>
+          </div>
+
+          <div class="coord-grid">
+            <div class="coord-field">
+              <label>X1 (Left)</label>
+              <input type="number" id="inp-x1" min="0" step="1">
+            </div>
+            <div class="coord-field">
+              <label>Y1 (Top)</label>
+              <input type="number" id="inp-y1" min="0" step="1">
+            </div>
+            <div class="coord-field">
+              <label>X2 (Right)</label>
+              <input type="number" id="inp-x2" min="0" step="1">
+            </div>
+            <div class="coord-field">
+              <label>Y2 (Bottom)</label>
+              <input type="number" id="inp-y2" min="0" step="1">
+            </div>
+          </div>
+
+          <!-- Live YOLO Label Decoder -->
+          <div class="yolo-decoder-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Exportable YOLO Format Line:</span>
+              <span style="font-size: 11px; color: var(--accent-emerald);" id="status-valid">● Valid Coordinates</span>
+            </div>
+
+            <div class="yolo-chip-row" id="decoder-chips">
+              <div class="yolo-chip chip-cls"><span class="chip-label">cls</span><span id="chip-val-cls">0</span></div>
+              <div class="yolo-chip chip-cx"><span class="chip-label">cx</span><span id="chip-val-cx">0.500000</span></div>
+              <div class="yolo-chip chip-cy"><span class="chip-label">cy</span><span id="chip-val-cy">0.630000</span></div>
+              <div class="yolo-chip chip-w"><span class="chip-label">w</span><span id="chip-val-w">0.180000</span></div>
+              <div class="yolo-chip chip-h"><span class="chip-label">h</span><span id="chip-val-h">0.060000</span></div>
+            </div>
+
+            <div class="math-breakdown" id="live-math-explanation">
+              <!-- Dynamically populated math breakdown -->
+            </div>
+          </div>
+
+          <!-- Letterbox Simulation -->
+          <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 13px; font-weight: 600; color: #fff;">Square Model Input Simulation</span>
+              <select id="model-input-size" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); color:#fff; border-radius: 6px; padding: 4px 8px; font-size: 12px;">
+                <option value="320">320 × 320</option>
+                <option value="640" selected>640 × 640</option>
+                <option value="960">960 × 960</option>
+                <option value="1280">1280 × 1280</option>
+              </select>
+            </div>
+            <div id="letterbox-details" style="font-family: var(--mono-font); font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+              <!-- Dynamic letterbox transform info -->
+            </div>
+          </div>
+
+          <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <button class="btn btn-primary" id="btn-download" style="flex-grow: 1;">
+              📥 Download Label (.txt)
+            </button>
+            <button class="btn btn-secondary" id="btn-copy" title="Copy YOLO text line">
+              📋 Copy Line
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 04: MODEL ARCHITECTURE -->
+    <section id="models">
+      <span class="section-tag">Module 04 • Architectures</span>
+      <h2>Model Landscape: Generations, Sizes & Tasks</h2>
+      <p class="section-lead">
+        When developers say "YOLO", they may refer to different generations, model scale factors, or computer vision tasks. Understanding these dimensions prevents mismatched architectures in production.
+      </p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Architecture Family</th>
+              <th>Core Innovation</th>
+              <th>Anchor Mechanism</th>
+              <th>Ideal Production Use Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>YOLOv5 / YOLOv7</strong></td>
+              <td>Popularized accessible PyTorch training; ELAN architectures.</td>
+              <td><span class="pill-tag" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">Anchor-Based</span></td>
+              <td>Legacy production edge devices with fixed ONNX kernels.</td>
+            </tr>
+            <tr>
+              <td><strong>YOLOv8 / YOLO11</strong></td>
+              <td>Anchor-free split head, C2f/C3k blocks, multi-task heads.</td>
+              <td><span class="pill-tag" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">Anchor-Free</span></td>
+              <td>General CCTV surveillance, drone feeds, high accuracy.</td>
+            </tr>
+            <tr>
+              <td><strong>YOLO26</strong></td>
+              <td>End-to-end NMS-free heads, ultra-low latency inference.</td>
+              <td><span class="pill-tag" style="background: rgba(6, 182, 212, 0.2); color: #38bdf8;">NMS-Free Anchorless</span></td>
+              <td>Real-time highway toll cameras, embedded edge hardware.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid-3" style="margin-top: 24px;">
+        <div class="panel">
+          <h3 style="font-size: 16px; margin-bottom: 10px; color: var(--accent-cyan);">Model Scale Variants</h3>
+          <p style="font-size: 14px; color: var(--text-muted); line-height: 1.6;">
+            <strong>Nano (n) & Small (s):</strong> ~3M–11M parameters. Fits on Raspberry Pi, Jetson Nano, and mobile devices.<br><br>
+            <strong>Medium (m) & Large (l):</strong> ~25M–45M parameters. Standard for workstation GPUs and cloud servers.<br><br>
+            <strong>XLarge (x):</strong> Max mAP, compute-heavy. Best for offline high-resolution dataset re-labeling.
+          </p>
+        </div>
+
+        <div class="panel">
+          <h3 style="font-size: 16px; margin-bottom: 10px; color: var(--accent-emerald);">Task Variety</h3>
+          <p style="font-size: 14px; color: var(--text-muted); line-height: 1.6;">
+            <strong>Detect:</strong> Standard rectangular bounding boxes.<br>
+            <strong>Segment:</strong> Polygon masks outlining exact vehicle contours.<br>
+            <strong>OBB (Oriented Box):</strong> Rotated bounding boxes for angled parking or aerial drone views.<br>
+            <strong>Pose:</strong> Keypoints (e.g. 4 plate corner points for perspective rectification).
+          </p>
+        </div>
+
+        <div class="panel">
+          <h3 style="font-size: 16px; margin-bottom: 10px; color: var(--accent-amber);">Edge Device Hardware Guide</h3>
+          <p style="font-size: 14px; color: var(--text-muted); line-height: 1.6;">
+            • <strong>Raspberry Pi 5:</strong> YOLO11n exported to NCNN / ONNX (~18 FPS).<br>
+            • <strong>NVIDIA Jetson Orin Nano:</strong> YOLO11s TensorRT FP16 (~65 FPS).<br>
+            • <strong>Server RTX 4090:</strong> YOLO26m batch processing (~450+ FPS).
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 05: TRAINING & LOSS -->
+    <section id="training">
+      <span class="section-tag">Module 05 • Training Process</span>
+      <h2>From Labeled Images to Neural Weights</h2>
+      <p class="section-lead">
+        Training an accurate model requires structured dataset splitting, loss calculation, and iterative gradient descent.
+      </p>
+
+      <div class="grid-2">
+        <div>
+          <div class="panel" style="margin-bottom: 20px;">
+            <div class="panel-header">
+              <span class="panel-title">📁 Ultralytics Dataset Structure</span>
+            </div>
+            <pre><code>dataset/
+├── dataset.yaml
+├── images/
+│   ├── train/  <span class="code-comment"># 70% of total frames</span>
+│   ├── val/    <span class="code-comment"># 20% validation</span>
+│   └── test/   <span class="code-comment"># 10% independent test</span>
+└── labels/
+    ├── train/  <span class="code-comment"># matching .txt files</span>
+    ├── val/
+    └── test/</code></pre>
+
+            <div style="margin-top: 14px;">
+              <div style="font-size: 12px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-bottom: 6px;">dataset.yaml (Plate Only)</div>
+              <pre><code>path: /path/to/dataset
 train: images/train
 val: images/val
 test: images/test
 names:
-  0: plate</pre><pre>python3 -m venv .venv
-# Linux/macOS:
-source .venv/bin/activate
-# Windows PowerShell instead:
-# .venv\Scripts\Activate.ps1
-python -m pip install ultralytics
-yolo detect train model=yolo26n.pt data=dataset.yaml epochs=50 imgsz=640 batch=8
-yolo detect val model=runs/detect/train/weights/best.pt data=dataset.yaml split=test
-yolo detect predict model=runs/detect/train/weights/best.pt source=sample.jpg
-yolo track model=runs/detect/train/weights/best.pt source=traffic.mp4 tracker=bytetrack.yaml</pre><p>50 epochs and batch 8 are starting settings, not guaranteed optimal settings. Lower the batch if memory is insufficient. Output folder names can increment. Train on a GPU when available; the GitHub Pages website cannot run these Python commands. General COCO weights detect vehicles but do not provide a number_plate class by default.</p></details><div class="cards"><div class="card"><h3>Precision</h3><p>Of predicted plates, how many were correct? Low precision means too many false alarms.</p></div><div class="card"><h3>Recall</h3><p>Of actual plates, how many were found? Low recall means missed plates.</p></div><div class="card"><h3>IoU / mAP</h3><p>IoU is overlap area divided by union area. mAP summarizes precision-recall performance under stated matching thresholds. It is not OCR accuracy.</p></div></div></section>
-<section id="tracking"><span class="tag">06 / ACROSS FRAMES</span><h2>A moving box needs an identity</h2><div class="grid"><div class="panel"><canvas id="track" width="900" height="280" aria-label="Simulated moving vehicle with stable ID"></canvas><label>Frame <input id="frame" type="range" min="0" max="100" value="0"></label><button id="play">Play / pause</button><p id="trackinfo"></p></div><div class="panel"><h3>Detection + association = tracking</h3><p>This is a scripted illustration: ID 17 is assigned, not inferred. A real tracker such as ByteTrack or BoT-SORT associates model detections using motion and overlap; some trackers also use appearance features.</p><p>Occlusion, similar cars, low frame rate and camera movement can cause ID switches. Track a vehicle and associate its plate crop with that vehicle; combine several sharp OCR readings for a more stable result.</p><p class="note">Count when a stable vehicle track crosses a chosen line in the required direction. Add deduplication; counting every frame would count the same vehicle repeatedly.</p></div></div></section>
-<section id="anpr"><span class="tag">07 / YOUR APPLICATION</span><h2>A practical ANPR pipeline</h2><div class="scroll"><table><tr><th>Stage</th><th>Input → output</th><th>Purpose</th></tr><tr><td>Capture</td><td>Camera → frame</td><td>Keep plate pixels sharp enough to read.</td></tr><tr><td>Vehicle detection + tracking</td><td>Frames → vehicle boxes + temporary IDs</td><td>Associate observations and avoid duplicate counts.</td></tr><tr><td>Plate detection</td><td>Frame or vehicle crop → plate box</td><td>Locate the area for OCR.</td></tr><tr><td>Crop / rectify</td><td>Plate box → readable patch</td><td>Reduce background; correct perspective if needed.</td></tr><tr><td>OCR</td><td>Patch → text + score</td><td>Read registration characters.</td></tr><tr><td>Temporal selection</td><td>Several readings → selected plate string</td><td>Reject weak readings and combine evidence.</td></tr><tr><td>Application</td><td>ID + text + timestamp → event</td><td>Log entry/exit, count vehicles or match authorized records.</td></tr></table></div><p>If detecting within a vehicle crop, add the crop's top-left offset to recover full-frame coordinates (after reversing any crop resize). Rectangles alone do not provide the four plate corners needed for accurate perspective rectification; use corner detection/keypoints or a suitable additional method.</p><details><summary>Common beginner mistakes</summary><ul><li>Dividing y coordinates by image width instead of height.</li><li>Putting confidence or OCR text in a five-column training label.</li><li>Using different class IDs across train and validation.</li><li>Training on one camera and assuming all cameras will work equally well.</li><li>Resizing or cropping images without transforming annotations.</li><li>Assuming a good detection mAP guarantees readable plate text.</li></ul></details><h3>Primary references</h3><ul><li><a href="https://docs.ultralytics.com/models/">Ultralytics model families</a></li><li><a href="https://docs.ultralytics.com/datasets/detect/">Detection annotation format</a></li><li><a href="https://docs.ultralytics.com/models/yolo26/">YOLO26</a> / <a href="https://docs.ultralytics.com/models/yolo11/">YOLO11</a></li><li><a href="https://docs.ultralytics.com/modes/train/">Training</a> / <a href="https://docs.ultralytics.com/modes/track/">Tracking</a></li><li><a href="https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site">GitHub Pages setup</a></li></ul></section></main><footer>YOLO Learning Lab • Educational simulations, not a trained ANPR system.</footer><script src="app.js"></script></body></html>
+  0: license_plate</code></pre>
+            </div>
+          </div>
+
+          <div class="callout callout-warning">
+            <strong>⚠️ Avoid Video Data Leakage:</strong> 
+            Never randomly shuffle frames from the same video clip between <code>train</code> and <code>val</code>! Consecutive video frames are nearly identical, causing inflated validation scores that fail in the real world. Always split by distinct camera sessions or different days.
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">🎯 The 3 Primary Loss Functions</span>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--accent-cyan); font-size: 14px; margin-bottom: 4px;">1. Box Loss (Complete IoU / CIoU)</h4>
+            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+              Penalizes box error by measuring overlap area, distance between bounding box centers, and aspect ratio consistency.
+            </p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--accent-emerald); font-size: 14px; margin-bottom: 4px;">2. Class Loss (Binary Cross-Entropy / BCE)</h4>
+            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+              Measures classification confidence accuracy (whether a predicted box is truly a vehicle vs a license plate vs background).
+            </p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <h4 style="color: var(--accent-amber); font-size: 14px; margin-bottom: 4px;">3. DFL Loss (Distribution Focal Loss)</h4>
+            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+              In anchor-free models (YOLOv8/11/26), boundary points are represented as probability distributions to handle blurred edges.
+            </p>
+          </div>
+
+          <div class="panel-header" style="margin-top: 24px;">
+            <span class="panel-title">💻 Runnable Python CLI Command</span>
+          </div>
+          <pre><code>yolo detect train \
+  data=dataset.yaml \
+  model=yolo26n.pt \
+  epochs=50 \
+  imgsz=640 \
+  batch=16 \
+  device=0</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 06: OBJECT TRACKING -->
+    <section id="tracking">
+      <span class="section-tag">Module 06 • Temporal Association</span>
+      <h2>Multi-Object Tracking & Tripwire Counting</h2>
+      <p class="section-lead">
+        A detection model operates on a single frame in isolation. Tracking connects detections across consecutive frames to maintain a persistent <strong>Track ID</strong> and prevent duplicate counting.
+      </p>
+
+      <div class="grid-2">
+        <!-- Interactive Tracking Simulator Canvas -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">🚗 Highway Tripwire Simulator</span>
+            <span class="metric-badge" id="sim-status-badge">🟢 Approaching Tripwire</span>
+          </div>
+
+          <div class="canvas-container" style="background: #080f1a;">
+            <canvas id="track" width="900" height="300" aria-label="Highway tracking and tripwire simulation"></canvas>
+          </div>
+
+          <div class="tracker-toolbar">
+            <button class="btn btn-primary btn-sm" id="btn-track-play">▶ Play Simulation</button>
+            <button class="btn btn-secondary btn-sm" id="btn-track-reset">↺ Reset</button>
+            <div class="slider-group">
+              <span style="font-size: 12px; color: var(--text-dim); font-family: var(--mono-font);">FRAME</span>
+              <input type="range" id="track-frame" min="0" max="100" value="0">
+              <span style="font-size: 12px; color: #fff; font-family: var(--mono-font); width: 35px;" id="track-frame-val">0</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;">
+            <div class="metric-badge">Track ID: <strong style="color: var(--accent-cyan);">#17</strong></div>
+            <div class="metric-badge">Velocity: <strong style="color: var(--accent-emerald);">65 km/h</strong></div>
+            <div class="metric-badge">Total Count: <strong style="color: var(--accent-amber);" id="sim-counter-display">0</strong></div>
+          </div>
+        </div>
+
+        <!-- Tracking Algorithm Explanation -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">🧠 How ByteTrack & BoT-SORT Work</span>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <h4 style="color: #fff; font-size: 14px; margin-bottom: 4px;">1. Kalman Filter Motion Estimation</h4>
+            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+              Predicts where the vehicle will appear in the next video frame based on its prior velocity, position, and acceleration.
+            </p>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <h4 style="color: #fff; font-size: 14px; margin-bottom: 4px;">2. ByteTrack Association Trick</h4>
+            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+              Traditional trackers discard low-confidence detections (&lt;0.5). ByteTrack keeps them! If a low-confidence box matches a prior high-confidence track, it preserves the ID even through heavy rain, blur, or occlusion.
+            </p>
+          </div>
+
+          <div style="margin-bottom: 16px;">
+            <h4 style="color: #fff; font-size: 14px; margin-bottom: 4px;">3. Directional Counting Logic</h4>
+            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+              A tripwire line <code>(x = 450)</code> registers a count only when a vehicle's center point transitions from <code>x &lt; 450</code> to <code>x &gt;= 450</code>. A cooldown registry prevents duplicate logs for the same ID.
+            </p>
+          </div>
+
+          <pre><code>yolo track \
+  source=traffic.mp4 \
+  model=yolo26n.pt \
+  tracker=bytetrack.yaml \
+  show=True</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 07: ANPR PIPELINE -->
+    <section id="anpr">
+      <span class="section-tag">Module 07 • Production Architecture</span>
+      <h2>End-to-End ANPR System Pipeline</h2>
+      <p class="section-lead">
+        A production Automated Number Plate Recognition system is never a single monolithic model. It is an orchestrated pipeline of specialized stages. Click any stage below to inspect its operational logic:
+      </p>
+
+      <div class="pipeline-wrapper">
+        <div class="pipeline-step active" data-step="0">
+          <div class="pipeline-num">STAGE 01</div>
+          <div class="pipeline-name">Capture</div>
+          <div class="pipeline-sub">High-speed camera</div>
+        </div>
+
+        <div class="pipeline-step" data-step="1">
+          <div class="pipeline-num">STAGE 02</div>
+          <div class="pipeline-name">Vehicle Track</div>
+          <div class="pipeline-sub">YOLO + ByteTrack</div>
+        </div>
+
+        <div class="pipeline-step" data-step="2">
+          <div class="pipeline-num">STAGE 03</div>
+          <div class="pipeline-name">Plate Detect</div>
+          <div class="pipeline-sub">Fine-tuned YOLO</div>
+        </div>
+
+        <div class="pipeline-step" data-step="3">
+          <div class="pipeline-num">STAGE 04</div>
+          <div class="pipeline-name">Warp & Rectify</div>
+          <div class="pipeline-sub">Homography / STN</div>
+        </div>
+
+        <div class="pipeline-step" data-step="4">
+          <div class="pipeline-num">STAGE 05</div>
+          <div class="pipeline-name">OCR Text</div>
+          <div class="pipeline-sub">PaddleOCR / CRNN</div>
+        </div>
+
+        <div class="pipeline-step" data-step="5">
+          <div class="pipeline-num">STAGE 06</div>
+          <div class="pipeline-name">Validation</div>
+          <div class="pipeline-sub">Regex & Database</div>
+        </div>
+      </div>
+
+      <div class="pipeline-detail-box" id="pipeline-info-card">
+        <!-- Dynamically rendered pipeline detail -->
+      </div>
+
+      <div class="callout" style="margin-top: 24px;">
+        <strong>🚀 Production Best Practice:</strong> 
+        Detecting the license plate inside the vehicle crop (2-stage detection) is much more robust than detecting tiny plates directly in a 4K frame. It eliminates false positives from street signs and billboard advertisements.
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>
+      <strong>YOLO Learning Lab</strong> — Built with zero external frameworks or backend trackers. 
+      Free & open computer vision education.
+    </p>
+    <p style="margin-top: 8px;">
+      Hosted on GitHub Pages • Ultralytics YOLO26 / YOLO11 / YOLOv8 Architecture Guide
+    </p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

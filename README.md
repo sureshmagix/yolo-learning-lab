@@ -1,36 +1,111 @@
-# YOLO Learning Lab
+# YOLO Learning Lab 🚀
 
-A buildless, interactive introduction to YOLO, annotation, model training, ANPR and tracking. Open `index.html` locally. No dependencies, account or backend are required. Uploaded images stay in the browser; nothing is transmitted by the application.
+An interactive, visual, buildless educational laboratory for mastering **YOLO object detection**, **bounding box normalization math**, **multi-object tracking (ByteTrack)**, and **ANPR (Automatic Number Plate Recognition)** pipelines.
 
-## GitHub Pages
+🌐 **Live Demo on GitHub Pages**: [https://sureshmagix.github.io/yolo-learning-lab/](https://sureshmagix.github.io/yolo-learning-lab/)
 
-1. Create a repository, for example `yolo-learning-lab`.
-2. Extract this ZIP and upload the contents of the `yolo-learning` folder to the repository root. `index.html` must be at the root, alongside `app.js` and `assets/`.
-3. Commit to `main`.
-4. In Settings → Pages, select Deploy from a branch, `main`, `/ (root)`, then Save.
-5. GitHub will display the published URL. For username `sureshmagix` and this repository name, the expected project URL is `https://sureshmagix.github.io/yolo-learning-lab/` (only available after deployment).
+---
 
-For the account-level URL `https://sureshmagix.github.io/`, use a repository named `sureshmagix.github.io` instead. Choose a repository/plan eligible for GitHub Pages. This package has not been pushed or published.
+## 🌟 Key Features & Improvements
 
-## Features
+### 1. Interactive Annotation Studio with Easy Box Controls
+* **8-Point Handle Resizing**: Grab any corner (`nw`, `ne`, `se`, `sw`) or edge (`n`, `e`, `s`, `w`) handle to easily adjust bounding boxes.
+* **Click & Drag to Move**: Click anywhere inside the box to reposition it across the image without resizing.
+* **Draw from Scratch**: Click and drag outside the box to immediately draw a new box with rubberband feedback.
+* **Quick-Snap Presets**:
+  * 🎯 **Snap Plate**: Automatically fits the license plate (`410, 585` to `590, 650`).
+  * 🚗 **Snap Vehicle**: Automatically fits the entire vehicle body.
+  * ↔ **Center Box**: Centers the bounding box within current image dimensions.
+* **High-Fidelity Vector Art**: High-resolution vector vehicle illustration with headlights, chrome grille, windshield reflections, and an authentic embossed license plate (`TN 09 AB 1234`).
+* **Custom Image Upload**: Upload any photo from your local disk; coordinates and normalization automatically calculate against the image's original dimensions.
 
-- Synthetic vehicle illustration for practising annotation.
-- Draw a replacement box using mouse or touch, or edit numeric coordinates.
-- Upload an image and normalize using its original dimensions.
-- Choose plate/vehicle and export one YOLO label row.
-- General annotation workflow and dimension-dependent examples.
-- Model generation/size/task comparison, training workflow and commands.
-- Scripted vehicle animation demonstrating a stable track ID and counting line.
-- ANPR pipeline and links to primary documentation.
+### 2. Live Color-Coded YOLO Label Decoder
+* Color-coded chips representing the 5 YOLO values:
+  * `class_id` (Indigo)
+  * `x_center` (Emerald)
+  * `y_center` (Cyan)
+  * `width` (Amber)
+  * `height` (Rose)
+* Real-time step-by-step arithmetic equations showing exact division and fractional conversion:
+  $$\text{cx} = \frac{(x_1 + x_2) / 2}{W}, \quad \text{cy} = \frac{(y_1 + y_2) / 2}{H}$$
+  $$\text{w} = \frac{x_2 - x_1}{W}, \quad \text{h} = \frac{y_2 - y_1}{H}$$
+* One-click **Download `.txt`** and **Copy to Clipboard**.
 
-This is not an inference engine, full annotation tool or production ANPR system. It does not train or run models. The exporter supports one box per image; a real multi-object dataset needs one row per object. The lab's two-class mapping is 0: object, 1: vehicle, 2: plate; the plate-only training example uses only 0: plate.
+### 3. Aspect-Preserving Letterbox Preprocessing Simulator
+* Simulates how neural network backbones (e.g. `640 × 640`, `320 × 320`) pad non-square aspect ratios with grey bars without distorting object shapes.
+* Displays dynamic scale factors $r$, padding per axis $(px, py)$, and transformed bounding box coordinates.
 
-## Training example
+### 4. Multi-Object Tracking & Highway Tripwire Simulator
+* Real-time canvas simulation of an approaching vehicle with ByteTrack Kalman filter motion trails.
+* Virtual counting gate (tripwire at $x = 450$) that illuminates and triggers a persistent directional counter without duplicate increments.
+* Scrubbing slider, play/pause controls, and frame-by-frame inspection.
 
-Use the website's dataset layout, replace the absolute path in `dataset.yaml`, collect and label your own data, then run the commands on a Python machine. GPU acceleration is recommended. Default COCO model weights have vehicle classes but no dedicated plate class. OCR training data and inference are separate from the plate detection labels.
+### 5. Interactive End-to-End ANPR Pipeline
+Clickable 6-stage architecture breakdown covering:
+1. **High-Speed Optical Capture** (Global shutter, 850nm IR illumination).
+2. **Vehicle Detection & Tracking** (YOLO26 / YOLO11 + ByteTrack Kalman filters).
+3. **Plate Localization** (Two-stage detector on vehicle crops).
+4. **Warp & Rectification** (Spatial Transformer Networks & 4-point homography).
+5. **Character Recognition** (PaddleOCR / CRNN with CTC Loss).
+6. **Validation & Business Logic** (Temporal majority voting & regional Regex filters).
 
-Verification: JavaScript syntax and coordinate cases were checked. Interactive browser testing was not performed in this environment. Model training was not run; no dataset or trained weights are included.
+---
 
-Primary references: https://docs.ultralytics.com/datasets/detect/ ; https://docs.ultralytics.com/models/ ; https://docs.ultralytics.com/modes/track/ ; https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
+## 🛠️ Architecture & Training Workflow
 
-Image inspector: original dimensions, aspect ratio, pixel count, box corners/centre/size/area, normalized coordinates and square letterbox scale/padding/transformed corners. Local image uploads do not run detection or OCR.
+### Ultralytics Dataset Structure
+```
+dataset/
+├── dataset.yaml
+├── images/
+│   ├── train/
+│   ├── val/
+│   └── test/
+└── labels/
+    ├── train/
+    ├── val/
+    └── test/
+```
+
+### Dataset YAML (`dataset.yaml`)
+```yaml
+path: /path/to/dataset
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: license_plate
+```
+
+### Train YOLO26 / YOLO11 on CLI
+```bash
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\Activate.ps1
+python -m pip install ultralytics
+
+# Train Nano Plate Detector
+yolo detect train model=yolo26n.pt data=dataset.yaml epochs=50 imgsz=640 batch=16
+
+# Validate Model
+yolo detect val model=runs/detect/train/weights/best.pt data=dataset.yaml split=test
+
+# Run Tracking on Video
+yolo track model=runs/detect/train/weights/best.pt source=traffic.mp4 tracker=bytetrack.yaml
+```
+
+---
+
+## 🚀 GitHub Pages Deployment
+
+1. Go to repository **Settings** → **Pages**.
+2. Under **Build and deployment**:
+   * **Source**: Select `Deploy from a branch`.
+   * **Branch**: `main`, folder `/ (root)`.
+   * Click **Save**.
+3. Your site will be live at:
+   `https://sureshmagix.github.io/yolo-learning-lab/`
+
+---
+
+## 📄 License
+MIT License. Created for open computer vision education.
