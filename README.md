@@ -34,4 +34,3 @@ Verification: JavaScript syntax and coordinate cases were checked. Interactive b
 Primary references: https://docs.ultralytics.com/datasets/detect/ ; https://docs.ultralytics.com/models/ ; https://docs.ultralytics.com/modes/track/ ; https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
 
 Image inspector: original dimensions, aspect ratio, pixel count, box corners/centre/size/area, normalized coordinates and square letterbox scale/padding/transformed corners. Local image uploads do not run detection or OCR.
-# yolo-learning-lab
